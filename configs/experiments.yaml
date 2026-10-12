@@ -30,7 +30,7 @@ corpus:
       share: 0.10
       russian: true
       sources:
-        - {kind: hf, path: volosati/habr, split: train, text: text_markdown, filter: {language: ru}, shuffle_buffer: 1000}
+        - {kind: parquet, path: volosati/habr, glob: "data/*.parquet", text: text_markdown, filter: {language: ru}}
     books:
       share: 0.10
       russian: true
@@ -46,7 +46,7 @@ corpus:
       share: 0.05
       russian: true
       sources:
-        - {kind: hf, path: irlspbru/RusLawOD, split: train, text: textIPS, shuffle_buffer: 200}
+        - {kind: parquet, path: irlspbru/RusLawOD, glob: "*.parquet", text: textIPS}
     en_code:
       share: 0.05
       russian: false

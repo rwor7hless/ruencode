@@ -4,6 +4,8 @@ import random
 from typing import Iterator
 from urllib.parse import urlparse
 
+import pyarrow.compute as pc
+import pyarrow.parquet as pq
 import zstandard as zstd
 
 
@@ -54,10 +56,33 @@ def _iter_pikabu(seed: int) -> Iterator[str]:
                     yield from pikabu_docs(json.loads(line))
 
 
-def iter_source(src: dict, seed: int) -> Iterator[str]:
+def _iter_parquet(src: dict, seed: int, fs=None) -> Iterator[str]:
+    """Читает из parquet только нужные колонки (row group целиком со всеми колонками не помещается в RAM)."""
+    root = src["path"]
+    if fs is None:  # по умолчанию — репозиторий датасета на HF Hub
+        from huggingface_hub import HfFileSystem
+        fs, root = HfFileSystem(), f"datasets/{src['path']}"
+    files = sorted(fs.glob(f"{root}/{src.get('glob', '**/*.parquet')}"))
+    rng = random.Random(seed)
+    rng.shuffle(files)
+    flt = src.get("filter") or {}
+    columns = [src["text"], *flt]
+    for path in files:
+        with fs.open(path, "rb") as f:
+            table = pq.read_table(f, columns=columns)
+        for k, v in flt.items():
+            table = table.filter(pc.equal(table[k], v))
+        texts = table[src["text"]].to_pylist()
+        rng.shuffle(texts)
+        yield from (t for t in texts if t)
+
+
+def iter_source(src: dict, seed: int, fs=None) -> Iterator[str]:
     kind = src.get("kind", "hf")
     if kind == "hf":
         yield from _iter_hf(src, seed)
+    elif kind == "parquet":
+        yield from _iter_parquet(src, seed, fs)
     elif kind == "pikabu":
         yield from _iter_pikabu(seed)
     else:

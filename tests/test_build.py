@@ -57,3 +57,37 @@ def test_url_matches():
     assert url_matches("https://www.ria.ru/2020/a.html", ["ria.ru"])
     assert not url_matches("https://maria.ru/x", ["ria.ru"])
     assert not url_matches(None, ["ria.ru"])
+
+
+def test_parquet_source_reads_only_needed_columns(tmp_path):
+    import fsspec
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from ruencod.data import sources
+
+    for i in range(3):
+        pq.write_table(pa.table({
+            "textIPS": [f"закон {i}-{j}" for j in range(4)],
+            "taggedtextIPS": ["<огромный размеченный текст>" * 10] * 4,
+            "language": ["ru", "en", "ru", "ru"],
+        }), tmp_path / f"part_{i}.parquet")
+
+    read_cols = []
+    real_read = pq.read_table
+
+    def spy(*a, **kw):
+        read_cols.append(kw.get("columns"))
+        return real_read(*a, **kw)
+
+    src = {"kind": "parquet", "path": str(tmp_path), "glob": "*.parquet", "text": "textIPS",
+           "filter": {"language": "ru"}}
+    pq_read = sources.pq.read_table
+    sources.pq.read_table = spy
+    try:
+        texts = list(sources.iter_source(src, seed=0, fs=fsspec.filesystem("file")))
+    finally:
+        sources.pq.read_table = pq_read
+    assert sorted(texts) == sorted(f"закон {i}-{j}" for i in range(3) for j in (0, 2, 3))
+    assert all(set(c) == {"textIPS", "language"} for c in read_cols)
+    assert texts != sorted(texts) or len(texts) < 3  # порядок перемешан
