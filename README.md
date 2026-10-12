@@ -97,3 +97,10 @@ uv run pytest
    uv run python -m ruencod.lm.run --config configs/gpu.yaml   # → results/lm_bpb.csv
    uv run python -m ruencod.viz.charts                         # → results/figures/5_lm_bpb.png
    ```
+6. Пауза: остановить процесс (Ctrl+C или закрыть окно / перезагрузиться) и потом продолжить:
+   ```bash
+   uv run python -m ruencod.lm.run --config configs/gpu.yaml --resume
+   ```
+   Готовые кандидаты (уже в `results/lm_bpb.csv`) пропускаются, прерванный продолжается с последнего
+   сохранения в `data/lm_ckpt/` (раз в 10 минут и при Ctrl+C) — результат тот же, что без перерыва.
+   Без `--resume` прогон начинается заново и перезаписывает `results/lm_bpb.csv`.

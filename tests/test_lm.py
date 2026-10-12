@@ -108,3 +108,116 @@ def test_peak_gpu_is_per_run():
     cfg = {"context": 16, "batch_size": 8, "lr": 3e-3, "warmup_frac": 0.05, "weight_decay": 0.0, "device": "cuda"}
     stats = train_lm(m, encode_corpus(tok, ["абвгд" * 200]), cfg, seed=0)
     assert stats["peak_gpu_gb"] < 0.1
+
+
+CPU_CFG = {"context": 16, "batch_size": 8, "lr": 3e-3, "warmup_frac": 0.05, "weight_decay": 0.1,
+           "threads": 2, "device": "cpu"}
+
+
+def _tiny(seed=0):
+    torch.manual_seed(seed)
+    return TinyLM(LMConfig(vocab_size=2000, d_model=32, n_layers=1, n_heads=2, context=16))
+
+
+def _tokens():
+    return encode_corpus(SmallCharTok(), ["абвгдеёжз" * 300])  # 21 шаг
+
+
+class _FailAfter:
+    """Подменяет forward: после `after` удачных вызовов бросает исключение (имитация остановки)."""
+
+    def __init__(self, forward, after, exc=KeyboardInterrupt):
+        self.forward, self.after, self.exc, self.n = forward, after, exc, 0
+
+    def __call__(self, *a, **kw):
+        self.n += 1
+        if self.n > self.after:
+            raise self.exc
+        return self.forward(*a, **kw)
+
+
+def test_resume_after_interrupt_matches_uninterrupted(tmp_path):
+    full = _tiny()
+    ref = train_lm(full, _tokens(), CPU_CFG, seed=0)
+    ckpt = tmp_path / "ckpt" / "m.pt"
+    part = _tiny()
+    part.forward = _FailAfter(part.forward, after=5)
+    with pytest.raises(KeyboardInterrupt):
+        train_lm(part, _tokens(), CPU_CFG, seed=0, ckpt_path=ckpt)
+    assert torch.load(ckpt)["step"] == 5  # Ctrl+C сохраняет состояние перед незавершённым шагом
+    resumed = _tiny(seed=123)  # другая инициализация: всё должно прийти из сохранения
+    stats = train_lm(resumed, _tokens(), CPU_CFG, seed=0, ckpt_path=ckpt, resume=True)
+    assert stats["steps"] == ref["steps"] and stats["train_tokens"] == ref["train_tokens"]
+    assert math.isclose(stats["final_loss"], ref["final_loss"], rel_tol=1e-5)
+    for (n, a), b in zip(full.named_parameters(), resumed.parameters()):
+        assert torch.allclose(a, b, atol=1e-6), n
+
+
+def test_periodic_checkpoint_survives_hard_kill(tmp_path):
+    ckpt = tmp_path / "m.pt"
+    part = _tiny()
+    part.forward = _FailAfter(part.forward, after=5, exc=RuntimeError)  # не Ctrl+C: сохранить «на выходе» нельзя
+    with pytest.raises(RuntimeError):
+        train_lm(part, _tokens(), {**CPU_CFG, "ckpt_minutes": 0}, seed=0, ckpt_path=ckpt)
+    assert torch.load(ckpt)["step"] == 5
+
+
+def test_resume_of_finished_training_does_not_train_again(tmp_path):
+    ckpt = tmp_path / "m.pt"
+    done = _tiny()
+    ref = train_lm(done, _tokens(), CPU_CFG, seed=0, ckpt_path=ckpt)
+    again = _tiny(seed=123)
+    again.forward = _FailAfter(again.forward, after=0)  # любой шаг обучения упал бы
+    stats = train_lm(again, _tokens(), CPU_CFG, seed=0, ckpt_path=ckpt, resume=True)
+    assert stats["steps"] == ref["steps"] and math.isclose(stats["final_loss"], ref["final_loss"])
+    for a, b in zip(done.parameters(), again.parameters()):
+        assert torch.equal(a, b)
+
+
+def _run_cfg(tmp_path):
+    return {"paths": {"data": str(tmp_path / "data"), "results": str(tmp_path / "res")}, "lm": {"train_bytes": 10}}
+
+
+def _fake_candidate(calls):
+    def fake(cfg, name, train_bytes, ckpt_path=None, resume=False):
+        calls.append((name, ckpt_path, resume))
+        return [{"candidate": name, "domain": "ru_all", "bpb": 0.5}]
+    return fake
+
+
+def test_run_all_resume_skips_finished_and_appends(tmp_path, monkeypatch):
+    import pandas as pd
+    from ruencod.lm import run
+    (tmp_path / "res").mkdir()
+    pd.DataFrame([{"candidate": "a", "domain": "ru_all", "bpb": 1.0}]).to_csv(tmp_path / "res" / "lm_bpb.csv", index=False)
+    ckpt_dir = tmp_path / "data" / "lm_ckpt"
+    ckpt_dir.mkdir(parents=True)
+    (ckpt_dir / "b.pt").write_bytes(b"x")
+    calls = []
+    monkeypatch.setattr(run, "run_candidate", _fake_candidate(calls))
+    run.run_all(_run_cfg(tmp_path), ["a", "b"], resume=True)
+    assert calls == [("b", ckpt_dir / "b.pt", True)]
+    saved = pd.read_csv(tmp_path / "res" / "lm_bpb.csv")
+    assert list(saved.candidate) == ["a", "b"] and list(saved.bpb) == [1.0, 0.5]
+    assert not (ckpt_dir / "b.pt").exists()  # результат записан — сохранение удалено
+
+
+def test_run_all_without_resume_starts_over(tmp_path, monkeypatch):
+    import pandas as pd
+    from ruencod.lm import run
+    (tmp_path / "res").mkdir()
+    pd.DataFrame([{"candidate": "a", "domain": "ru_all", "bpb": 1.0}]).to_csv(tmp_path / "res" / "lm_bpb.csv", index=False)
+    calls = []
+    monkeypatch.setattr(run, "run_candidate", _fake_candidate(calls))
+    run.run_all(_run_cfg(tmp_path), ["a", "b"])
+    assert [c[0] for c in calls] == ["a", "b"] and not any(c[2] for c in calls)
+    assert list(pd.read_csv(tmp_path / "res" / "lm_bpb.csv").bpb) == [0.5, 0.5]
+
+
+def test_smoke_does_not_checkpoint(tmp_path, monkeypatch):
+    from ruencod.lm import run
+    calls = []
+    monkeypatch.setattr(run, "run_candidate", _fake_candidate(calls))
+    monkeypatch.setattr(run, "_smoke_line", lambda name, rows, full_bytes: None)
+    run.run_all(_run_cfg(tmp_path), ["a"], smoke=True)
+    assert calls[0][1] is None

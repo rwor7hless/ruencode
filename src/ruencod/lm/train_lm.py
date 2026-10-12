@@ -1,6 +1,8 @@
 import contextlib
 import math
+import os
 import time
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -32,7 +34,20 @@ def autocast(device: str):
     return contextlib.nullcontext()
 
 
-def train_lm(model, tokens: np.ndarray, lm_cfg: dict, seed: int, log_every: int = 50) -> dict:
+def save_checkpoint(path, model, opt, step: int, elapsed: float, loss: float, n_chunks: int) -> None:
+    """Атомарно: при обрыве во время записи старое сохранение остаётся целым."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    torch.save({"model": model.state_dict(), "opt": opt.state_dict(), "step": step, "elapsed": elapsed,
+                "loss": loss, "n_chunks": n_chunks}, tmp)
+    os.replace(tmp, path)
+
+
+def train_lm(model, tokens: np.ndarray, lm_cfg: dict, seed: int, log_every: int = 50,
+             ckpt_path=None, resume: bool = False) -> dict:
+    """ckpt_path: куда сохраняться раз в lm_cfg["ckpt_minutes"] минут, при Ctrl+C и в конце;
+    resume: продолжить с сохранения (порядок батчей задан seed, так что итог тот же, что без перерыва)."""
     torch.manual_seed(seed)
     device = pick_device(lm_cfg.get("device", "auto"))
     if device == "cpu":
@@ -51,30 +66,57 @@ def train_lm(model, tokens: np.ndarray, lm_cfg: dict, seed: int, log_every: int 
                              fused=device == "cuda")
     warmup = max(1, int(steps * lm_cfg["warmup_frac"]))
     lr_max, lr_min = lm_cfg["lr"], lm_cfg["lr"] * 0.1
-    t0, loss_val = time.time(), float("nan")
+    start, before, loss_val = 0, 0.0, float("nan")
+    if resume and ckpt_path and Path(ckpt_path).exists():
+        st = torch.load(ckpt_path, map_location=device)
+        if st["n_chunks"] != n_chunks:
+            raise ValueError(f"{ckpt_path}: сохранение от другого корпуса ({st['n_chunks']} != {n_chunks} окон)")
+        model.load_state_dict(st["model"])
+        opt.load_state_dict(st["opt"])
+        start, before, loss_val = st["step"], st["elapsed"], st["loss"]
+        print(f"resume from step {start}/{steps}", flush=True)
+    t0 = last_save = time.time()
+    every = lm_cfg.get("ckpt_minutes", 10) * 60
+
+    def save(done_steps: int) -> None:
+        save_checkpoint(ckpt_path, model, opt, done_steps, before + time.time() - t0, loss_val, n_chunks)
+
     model.train()
-    for step in range(steps):
-        idx = order[step * bs:(step + 1) * bs]
-        win = np.stack([tokens[i * ctx:i * ctx + ctx + 1] for i in idx]).astype(np.int64)
-        x, y = torch.from_numpy(win[:, :-1]).to(device), torch.from_numpy(win[:, 1:]).to(device)
-        if step < warmup:
-            lr = lr_max * (step + 1) / warmup
-        else:
-            prog = (step - warmup) / max(1, steps - warmup)
-            lr = lr_min + 0.5 * (lr_max - lr_min) * (1 + math.cos(math.pi * prog))
-        for g in opt.param_groups:
-            g["lr"] = lr
-        with autocast(device):
-            _, loss = model(x, y)
-        opt.zero_grad(set_to_none=True)
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        opt.step()
-        loss_val = loss.item()
-        if step % log_every == 0:
-            done = (step + 1) * bs * ctx
-            print(f"step {step}/{steps} loss {loss_val:.3f} tok/s {done / (time.time() - t0):.0f}", flush=True)
-    secs = time.time() - t0
+    next_step = start
+    try:
+        for step in range(start, steps):
+            idx = order[step * bs:(step + 1) * bs]
+            win = np.stack([tokens[i * ctx:i * ctx + ctx + 1] for i in idx]).astype(np.int64)
+            x, y = torch.from_numpy(win[:, :-1]).to(device), torch.from_numpy(win[:, 1:]).to(device)
+            if step < warmup:
+                lr = lr_max * (step + 1) / warmup
+            else:
+                prog = (step - warmup) / max(1, steps - warmup)
+                lr = lr_min + 0.5 * (lr_max - lr_min) * (1 + math.cos(math.pi * prog))
+            for g in opt.param_groups:
+                g["lr"] = lr
+            with autocast(device):
+                _, loss = model(x, y)
+            opt.zero_grad(set_to_none=True)
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            opt.step()
+            next_step = step + 1
+            loss_val = loss.item()
+            if step % log_every == 0:
+                done = (step + 1 - start) * bs * ctx
+                print(f"step {step}/{steps} loss {loss_val:.3f} tok/s {done / (time.time() - t0):.0f}", flush=True)
+            if ckpt_path and time.time() - last_save >= every:
+                save(next_step)
+                last_save = time.time()
+    except KeyboardInterrupt:
+        if ckpt_path:
+            save(next_step)  # незавершённый шаг начнётся заново
+            print(f"saved {ckpt_path} at step {next_step}/{steps}", flush=True)
+        raise
+    if ckpt_path and start < steps:
+        save(steps)  # обрыв во время оценки не потребует обучать заново
+    secs = before + time.time() - t0
     trained = n_chunks * ctx
     peak = torch.cuda.max_memory_allocated() / 1e9 if device == "cuda" else None
     return {"device": device, "steps": steps, "train_tokens": trained, "seconds": round(secs, 1),

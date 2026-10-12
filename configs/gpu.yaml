@@ -15,4 +15,5 @@ lm:
   weight_decay: 0.1
   train_bytes: 300000000    # 300 МБ текста на кандидата; уточнить по --smoke
   eval_bytes_per_domain: 2000000
+  ckpt_minutes: 10          # сохранение в data/lm_ckpt/ для --resume (o200k: ~2.9 ГБ на диске)
   candidates: [bpe-64k, unigram-64k, morph-bpe-64k, o200k]
