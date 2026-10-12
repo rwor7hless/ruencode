@@ -1,0 +1,6 @@
+data/
+artifacts/tokenizers/
+.venv/
+__pycache__/
+*.pyc
+.env
