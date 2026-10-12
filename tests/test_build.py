@@ -36,7 +36,7 @@ def test_build_fills_budgets_and_dedups(tmp_path):
     texts = list(iter_domain(tmp_path / "corpus", "train", "web")) + list(iter_domain(tmp_path / "corpus", "heldout", "web"))
     assert len(texts) == len(set(texts))
     assert all(MARK not in t for t in texts)
-    assert json.loads((tmp_path / "corpus" / "stats.json").read_text())["web"]["docs"] == web["docs"]
+    assert json.loads((tmp_path / "corpus" / "stats.json").read_text(encoding="utf-8"))["web"]["docs"] == web["docs"]
 
 
 def test_build_records_shortfall_and_terminates(tmp_path):

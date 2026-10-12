@@ -69,9 +69,9 @@ def build(cfg: dict, domains: list[str] | None = None, iter_source_fn=iter_sourc
                 ds["heldout_bytes"] += bh
         stats[domain] = ds
     stats_path = out / "stats.json"
-    old = json.loads(stats_path.read_text()) if stats_path.exists() else {}
+    old = json.loads(stats_path.read_text(encoding="utf-8")) if stats_path.exists() else {}
     old.update(stats)
-    stats_path.write_text(json.dumps(old, ensure_ascii=False, indent=2))
+    stats_path.write_text(json.dumps(old, ensure_ascii=False, indent=2), encoding="utf-8")
     return stats
 
 

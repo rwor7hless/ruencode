@@ -28,7 +28,7 @@ class ClaudeCounter:
             load_dotenv(ROOT / ".env")
             client = anthropic.Anthropic(max_retries=8)
         self.model, self.cache_path, self.client = model, Path(cache_path), client
-        self.cache: dict[str, int] = json.loads(self.cache_path.read_text()) if self.cache_path.exists() else {}
+        self.cache: dict[str, int] = json.loads(self.cache_path.read_text(encoding="utf-8")) if self.cache_path.exists() else {}
         self._overhead: int | None = None
 
     def _raw(self, text: str) -> int:
@@ -61,5 +61,5 @@ class ClaudeCounter:
     def save(self) -> None:
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.cache_path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self.cache))
+        tmp.write_text(json.dumps(self.cache), encoding="utf-8")
         os.replace(tmp, self.cache_path)

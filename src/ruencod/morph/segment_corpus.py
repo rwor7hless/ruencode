@@ -137,7 +137,7 @@ def run(cfg: dict) -> dict:
     }
     results = cfg_path(cfg, "results")
     results.mkdir(parents=True, exist_ok=True)
-    (results / "morph_coverage.json").write_text(json.dumps(coverage, indent=2))
+    (results / "morph_coverage.json").write_text(json.dumps(coverage, indent=2), encoding="utf-8")
 
     with _CTX.Pool(mcfg["workers"], initializer=_init_seg, initargs=(cache_path,)) as pool:
         for d in domains:

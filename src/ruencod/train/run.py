@@ -34,7 +34,7 @@ def train_one(cfg: dict, algo: str, vocab: int, force: bool = False) -> Path:
     save_tokenizer(tok, out)
     meta = {"algo": algo, "vocab_requested": vocab, "vocab_actual": tok.get_vocab_size(),
             "seconds": round(time.time() - t0, 1), "train_bytes_limit": limit}
-    (out / "meta.json").write_text(json.dumps(meta, indent=2))
+    (out / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     print(json.dumps({"name": out.name, **meta}), flush=True)
     return out
 

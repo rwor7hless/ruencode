@@ -34,11 +34,11 @@ def make(cfg: dict, claude_client=None) -> dict:
         s["usd_per_1000_words"]["final_at_claude_price"] = f[final] * claude["usd_per_mtok"] / 1000
     cov = res / "morph_coverage.json"
     if cov.exists():
-        s["morph_coverage"] = json.loads(cov.read_text())
+        s["morph_coverage"] = json.loads(cov.read_text(encoding="utf-8"))
     if (res / "lm_bpb.csv").exists():
         lm = pd.read_csv(res / "lm_bpb.csv").query("domain == 'ru_all'")
         s["lm_bpb"] = dict(zip(lm.candidate, lm.bpb))
-    (res / "summary.json").write_text(json.dumps(s, ensure_ascii=False, indent=2))
+    (res / "summary.json").write_text(json.dumps(s, ensure_ascii=False, indent=2), encoding="utf-8")
 
     ours, o200k = resolve(cfg, final), resolve(cfg, gpt["tokenizer"])
     examples = [{"text": t, "gpt_tokens": len(o200k.encode(t)), "ours_tokens": len(ours.encode(t))}
@@ -51,7 +51,7 @@ def make(cfg: dict, claude_client=None) -> dict:
     web = ROOT / "web"
     web.mkdir(exist_ok=True)
     (web / "examples.json").write_text(json.dumps(
-        {"claude_label": claude["label"] if claude_on else None, "summary": s, "examples": examples}, ensure_ascii=False, indent=2))
+        {"claude_label": claude["label"] if claude_on else None, "summary": s, "examples": examples}, ensure_ascii=False, indent=2), encoding="utf-8")
     return s
 
 

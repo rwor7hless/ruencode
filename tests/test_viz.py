@@ -85,7 +85,7 @@ def test_summary_without_claude(tmp_path, monkeypatch):
     monkeypatch.setattr(summary, "ROOT", tmp_path)
     s = summary.make(_cfg_no_claude(tmp_path), claude_client=_NoClient())
     assert "claude" not in s["fertility"] and s["savings_vs_gpt_pct"] > 0
-    ex = __import__("json").loads((tmp_path / "web" / "examples.json").read_text())
+    ex = __import__("json").loads((tmp_path / "web" / "examples.json").read_text(encoding="utf-8"))
     assert ex["claude_label"] is None and "claude_tokens" not in ex["examples"][0]
 
 

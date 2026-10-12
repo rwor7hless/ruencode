@@ -42,7 +42,7 @@ def test_cache_is_per_model(tmp_path):
 def test_load_dotenv_sets_missing_but_keeps_existing(tmp_path, monkeypatch):
     from ruencod.eval.claude_count import load_dotenv
     env = tmp_path / ".env"
-    env.write_text("# комментарий\nANTHROPIC_API_KEY=sk-ant-test\nOTHER='x y'\n")
+    env.write_text("# комментарий\nANTHROPIC_API_KEY=sk-ant-test\nOTHER='x y'\n", encoding="utf-8")
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setenv("OTHER", "keep")
     load_dotenv(env)
