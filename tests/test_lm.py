@@ -221,3 +221,21 @@ def test_smoke_does_not_checkpoint(tmp_path, monkeypatch):
     monkeypatch.setattr(run, "_smoke_line", lambda name, rows, full_bytes: None)
     run.run_all(_run_cfg(tmp_path), ["a"], smoke=True)
     assert calls[0][1] is None
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="нужна видеокарта")
+def test_resume_on_cuda_matches_uninterrupted(tmp_path):
+    cfg = {**CPU_CFG, "device": "cuda"}  # fused AdamW, bf16, загрузка сохранения в видеопамять
+    full = _tiny()
+    ref = train_lm(full, _tokens(), cfg, seed=0)
+    ckpt = tmp_path / "m.pt"
+    part = _tiny()
+    part.forward = _FailAfter(part.forward, after=5)
+    with pytest.raises(KeyboardInterrupt):
+        train_lm(part, _tokens(), cfg, seed=0, ckpt_path=ckpt)
+    resumed = _tiny(seed=123)
+    stats = train_lm(resumed, _tokens(), cfg, seed=0, ckpt_path=ckpt, resume=True)
+    assert stats["steps"] == ref["steps"]
+    assert math.isclose(stats["final_loss"], ref["final_loss"], rel_tol=1e-3)
+    for (n, a), b in zip(full.named_parameters(), resumed.parameters()):
+        assert torch.allclose(a, b, atol=1e-4), n
