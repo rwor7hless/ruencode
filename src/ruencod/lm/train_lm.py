@@ -37,6 +37,8 @@ def train_lm(model, tokens: np.ndarray, lm_cfg: dict, seed: int, log_every: int 
     device = pick_device(lm_cfg.get("device", "auto"))
     if device == "cpu":
         torch.set_num_threads(lm_cfg["threads"])
+    else:
+        torch.cuda.reset_peak_memory_stats()  # пик — только этого кандидата
     model.to(device)
     ctx, bs = lm_cfg["context"], lm_cfg["batch_size"]
     n_chunks = (len(tokens) - 1) // ctx
@@ -45,7 +47,8 @@ def train_lm(model, tokens: np.ndarray, lm_cfg: dict, seed: int, log_every: int 
     decay = [p for p in model.parameters() if p.dim() >= 2]
     no_decay = [p for p in model.parameters() if p.dim() < 2]
     opt = torch.optim.AdamW([{"params": decay, "weight_decay": lm_cfg["weight_decay"]},
-                             {"params": no_decay, "weight_decay": 0.0}], lr=lm_cfg["lr"], betas=(0.9, 0.95))
+                             {"params": no_decay, "weight_decay": 0.0}], lr=lm_cfg["lr"], betas=(0.9, 0.95),
+                             fused=device == "cuda")
     warmup = max(1, int(steps * lm_cfg["warmup_frac"]))
     lr_max, lr_min = lm_cfg["lr"], lm_cfg["lr"] * 0.1
     t0, loss_val = time.time(), float("nan")

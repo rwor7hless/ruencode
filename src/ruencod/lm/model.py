@@ -14,6 +14,7 @@ class LMConfig:
     n_heads: int = 6
     context: int = 512
     loss_chunk: int = 0  # >0: считать softmax кусками по столько токенов (экономия памяти на больших словарях)
+    checkpoint_blocks: bool = False  # не хранить активации блоков, пересчитывать на backward (экономия памяти)
 
 
 def rope_cache(seq_len: int, head_dim: int, base: float = 10000.0):
@@ -70,8 +71,12 @@ class TinyLM(nn.Module):
 
     def forward(self, idx, targets=None, reduction="mean"):
         x = self.emb(idx)
+        recompute = self.c.checkpoint_blocks and torch.is_grad_enabled()
         for blk in self.blocks:
-            x = blk(x, self.cos, self.sin)
+            if recompute:
+                x = checkpoint(blk, x, self.cos, self.sin, use_reentrant=False)
+            else:
+                x = blk(x, self.cos, self.sin)
         h = self.ln_f(x)
         if targets is None:
             return h @ self.emb.weight.T, None  # связанные эмбеддинги

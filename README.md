@@ -87,7 +87,10 @@ uv run pytest
    ```bash
    uv run python -m ruencod.lm.run --config configs/gpu.yaml --smoke
    ```
-   Если `peak_gpu_gb` больше ~7.5 — уменьшить в `configs/gpu.yaml` `batch_size` до 4 или `loss_chunk` до 256.
+   Ориентиры для 4060 Ti: ~14k токенов/с и ~0.9 ч у `bpe-64k`, ~5.7k токенов/с, пик 5.2 ГБ и ~2.8 ч у `o200k`.
+   Если `tokens_per_sec` у кого-то в разы ниже — видеопамять переполнена и драйвер Windows молча
+   выносит её в общую память: `peak_gpu_gb` должен быть меньше свободной памяти (8 ГБ минус то,
+   что занимает рабочий стол, см. `nvidia-smi`). Закрыть браузер/игры или уменьшить `loss_chunk` до 256.
    Если `estimated_full_hours` слишком велико — уменьшить `train_bytes`.
 5. Полный прогон и график:
    ```bash

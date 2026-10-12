@@ -1,5 +1,9 @@
 import argparse
 import json
+import os
+
+# до первого обращения к CUDA: меньше фрагментации видеопамяти (на 8 ГБ это ~1 ГБ запаса)
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 import pandas as pd
 
@@ -17,7 +21,8 @@ def run_candidate(cfg: dict, name: str, train_bytes: int) -> list[dict]:
     data = cfg_path(cfg, "data") / "corpus"
     tokens = encode_corpus(tok, iter_mix(data, "train", domain_shares(cfg), train_bytes))
     model = TinyLM(LMConfig(vocab_size=tok.vocab_size, d_model=lm["d_model"], n_layers=lm["n_layers"],
-                            n_heads=lm["n_heads"], context=lm["context"], loss_chunk=lm.get("loss_chunk", 0)))
+                            n_heads=lm["n_heads"], context=lm["context"], loss_chunk=lm.get("loss_chunk", 0),
+                            checkpoint_blocks=lm.get("checkpoint_blocks", False)))
     stats = train_lm(model, tokens, lm, cfg["seed"])
     rows, ru_bits, ru_bytes = [], 0.0, 0
     for d in cfg["corpus"]["domains"]:
