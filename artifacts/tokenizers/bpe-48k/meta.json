@@ -1,0 +1,7 @@
+{
+  "algo": "bpe",
+  "vocab_requested": 48000,
+  "vocab_actual": 48000,
+  "seconds": 289.1,
+  "train_bytes_limit": null
+}

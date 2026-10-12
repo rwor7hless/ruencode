@@ -1,0 +1,7 @@
+{
+  "algo": "unigram",
+  "vocab_requested": 32000,
+  "vocab_actual": 32000,
+  "seconds": 360.3,
+  "train_bytes_limit": 1500000000
+}

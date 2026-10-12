@@ -1,0 +1,7 @@
+{
+  "algo": "morph-bpe",
+  "vocab_requested": 32000,
+  "vocab_actual": 32000,
+  "seconds": 280.2,
+  "train_bytes_limit": null
+}

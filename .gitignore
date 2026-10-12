@@ -1,5 +1,5 @@
 /data/
-/artifacts/tokenizers/
+/results/*.log
 /data_smoke/
 /artifacts_smoke/
 /results_smoke/
