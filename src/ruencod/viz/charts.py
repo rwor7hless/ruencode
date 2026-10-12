@@ -65,7 +65,6 @@ def fertility_bar(cfg, df, out: Path) -> Path:
     _hbar(ax, [_label(cfg, k) for k, _ in items], [v for _, v in items],
           [PALETTE[_kind(df, k)] for k, _ in items], lambda v: f"{v:.2f}")
     ax.set_xlabel("токенов на слово русского текста (меньше — лучше)")
-    ax.set_title("Сколько токенов уходит на одно русское слово", loc="left")
     fig.savefig(out)
     plt.close(fig)
     return out
@@ -86,7 +85,6 @@ def vocab_curve(cfg, df, out: Path) -> Path:
         ax.axhline(vals["o200k"], ls="--", lw=1.5, color=PALETTE["baseline"], label=_label(cfg, "o200k"))
     ax.set_xlabel("размер словаря, тыс. токенов")
     ax.set_ylabel("токенов на слово")
-    ax.set_title("Больше словарь — меньше токенов, но отдача падает", loc="left")
     ax.legend(frameon=False)
     fig.savefig(out)
     plt.close(fig)
@@ -107,7 +105,6 @@ def domains_bar(cfg, df, out: Path) -> Path:
     ax.set_xticks(range(len(pv)), pv.index, rotation=20)
     ax.grid(axis="x", visible=False)
     ax.set_ylabel("токенов на слово")
-    ax.set_title("По доменам: где выигрыш больше", loc="left")
     ax.legend(frameon=False)
     fig.savefig(out)
     plt.close(fig)
@@ -128,7 +125,6 @@ def cost_bar(cfg, df, out: Path) -> Path:
     fig, ax = plt.subplots(figsize=(9, 0.6 * len(bars) + 1.5))
     _hbar(ax, [b[0] for b in bars], [b[1] for b in bars], [PALETTE[b[2]] for b in bars], lambda v: f"${v:.4f}")
     ax.set_xlabel("$ за 1000 слов русского текста (входные токены)")
-    ax.set_title(f"Цена 1000 слов (цены на {cfg['prices'].get('verified_on', '')})", loc="left")
     fig.savefig(out)
     plt.close(fig)
     return out
@@ -140,7 +136,6 @@ def lm_bar(cfg, lm: pd.DataFrame, out: Path) -> Path:
     colors = [PALETTE["baseline"] if c == "o200k" else PALETTE[c.rsplit("-", 1)[0]] for c in sub.candidate]
     _hbar(ax, [_label(cfg, c) for c in sub.candidate], list(sub.bpb), colors, lambda v: f"{v:.3f}")
     ax.set_xlabel("бит на байт текста (меньше — лучше)")
-    ax.set_title("Мини-модель 10M: с каким токенизатором учится лучше", loc="left")
     fig.savefig(out)
     plt.close(fig)
     return out
