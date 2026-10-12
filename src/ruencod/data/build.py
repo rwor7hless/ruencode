@@ -35,8 +35,6 @@ def build(cfg: dict, domains: list[str] | None = None, iter_source_fn=iter_sourc
                 bt = bh = 0
                 bar = tqdm(total=st + sh, unit="B", unit_scale=True, desc=f"{domain}[{i}]")
                 for raw in iter_source_fn(src, cfg["seed"]):
-                    if bt >= st and bh >= sh:
-                        break
                     text = normalize(raw, html_source=src.get("html", False))
                     for chunk in chunk_long(text, corpus["max_chars"]):
                         if not accept(chunk, min_chars=corpus["min_chars"], max_chars=corpus["max_chars"],
@@ -60,6 +58,8 @@ def build(cfg: dict, domains: list[str] | None = None, iter_source_fn=iter_sourc
                         bar.update(n)
                         if bt >= st and bh >= sh:
                             break
+                    if bt >= st and bh >= sh:
+                        break  # не ждём следующий документ: у потоковых источников это могут быть минуты
                 bar.close()
                 if bt < st or bh < sh:
                     ds["shortfall"].append({"source": src.get("path", src.get("kind")),

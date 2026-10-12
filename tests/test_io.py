@@ -34,3 +34,15 @@ def test_config_base_merge():
     assert cfg["train"]["vocab_sizes"] == [2000, 4000]
     assert cfg["corpus"]["min_chars"] == 200  # унаследовано
     assert cfg["corpus"]["domains"]["web"]["share"] == 0.30
+
+
+def test_writer_is_atomic(tmp_path):
+    import pytest
+    p = tmp_path / "x.jsonl.zst"
+    with pytest.raises(RuntimeError):
+        with ZstJsonlWriter(p) as w:
+            w.write({"text": "a"})
+            assert not p.exists(), "файл появляется только после успешного закрытия"
+            raise RuntimeError("прервано")
+    assert not p.exists()
+    assert list(tmp_path.iterdir()) == [], "временный файл убран"

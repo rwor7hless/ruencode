@@ -91,3 +91,17 @@ def test_parquet_source_reads_only_needed_columns(tmp_path):
     assert sorted(texts) == sorted(f"закон {i}-{j}" for i in range(3) for j in (0, 2, 3))
     assert all(set(c) == {"textIPS", "language"} for c in read_cols)
     assert texts != sorted(texts) or len(texts) < 3  # порядок перемешан
+
+
+def test_build_stops_without_fetching_extra_documents(tmp_path):
+    pulls = []
+
+    def counting_source(src, seed):
+        for i in range(10_000):
+            pulls.append(i)
+            yield f"Документ номер {i} про русский язык и токены, достаточно длинный."
+
+    cfg = _cfg(tmp_path, total=2000, held=0)
+    cfg["corpus"]["domains"] = {"web": {"share": 1.0, "russian": True, "sources": [{"kind": "fake"}]}}
+    stats = build(cfg, iter_source_fn=counting_source)
+    assert len(pulls) == stats["web"]["docs"], "после набора бюджета источник больше не дёргаем"
