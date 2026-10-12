@@ -30,12 +30,12 @@ corpus:
       share: 0.10
       russian: true
       sources:
-        - {kind: hf, path: volosati/habr, split: train, text: text_markdown, filter: {language: ru}}
+        - {kind: hf, path: volosati/habr, split: train, text: text_markdown, filter: {language: ru}, shuffle_buffer: 1000}
     books:
       share: 0.10
       russian: true
       sources:
-        - {kind: hf, path: wikimedia/wikisource, name: 20231201.ru, split: train, text: text}
+        - {kind: hf, path: wikimedia/wikisource, name: 20231201.ru, split: train, text: text, shuffle_buffer: 1000}
     news:
       share: 0.10
       russian: true
@@ -46,7 +46,7 @@ corpus:
       share: 0.05
       russian: true
       sources:
-        - {kind: hf, path: irlspbru/RusLawOD, split: train, text: textIPS, shuffle_buffer: 500}
+        - {kind: hf, path: irlspbru/RusLawOD, split: train, text: textIPS, shuffle_buffer: 200}
     en_code:
       share: 0.05
       russian: false
