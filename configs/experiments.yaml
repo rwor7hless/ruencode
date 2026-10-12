@@ -111,10 +111,10 @@ lm:
   train_bytes: 30000000        # пересчитывается по smoke-run
   eval_bytes_per_domain: 2000000
   threads: 20
-  candidates: []               # заполняется после выбора V
+  candidates: [bpe-64k, unigram-64k, morph-bpe-64k, o200k]
 
 final:
-  tokenizer: null              # заполняется после выбора финалиста
+  tokenizer: bpe-64k           # V=64k выбран пользователем; финалист уточняется по мини-LM
 
 examples:
   - "достопримечательностями"
