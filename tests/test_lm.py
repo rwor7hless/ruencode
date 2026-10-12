@@ -53,3 +53,28 @@ def test_tiny_overfit():
     cfg = {"context": 16, "batch_size": 8, "lr": 3e-3, "warmup_frac": 0.05, "weight_decay": 0.0, "threads": 2}
     stats = train_lm(m, tokens, cfg, seed=0)
     assert stats["final_loss"] < 2.0 and stats["steps"] > 0
+
+
+def test_chunked_loss_matches_full_loss_and_grads():
+    torch.manual_seed(0)
+    full = TinyLM(LMConfig(vocab_size=300, d_model=32, n_layers=2, n_heads=2, context=16))
+    chunked = TinyLM(LMConfig(vocab_size=300, d_model=32, n_layers=2, n_heads=2, context=16, loss_chunk=7))
+    chunked.load_state_dict(full.state_dict())
+    x = torch.randint(0, 300, (3, 16))
+    y = torch.randint(0, 300, (3, 16))
+    for reduction in ("mean", "sum"):
+        _, a = full(x, y, reduction=reduction)
+        _, b = chunked(x, y, reduction=reduction)
+        assert torch.allclose(a, b, atol=1e-4)
+    _, a = full(x, y)
+    _, b = chunked(x, y)
+    a.backward()
+    b.backward()
+    assert torch.allclose(full.emb.weight.grad, chunked.emb.weight.grad, atol=1e-5)
+
+
+def test_pick_device_falls_back_to_cpu(monkeypatch):
+    from ruencod.lm.train_lm import pick_device
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    assert pick_device("auto") == "cpu"
+    assert pick_device("cpu") == "cpu"

@@ -17,7 +17,7 @@ def run_candidate(cfg: dict, name: str, train_bytes: int) -> list[dict]:
     data = cfg_path(cfg, "data") / "corpus"
     tokens = encode_corpus(tok, iter_mix(data, "train", domain_shares(cfg), train_bytes))
     model = TinyLM(LMConfig(vocab_size=tok.vocab_size, d_model=lm["d_model"], n_layers=lm["n_layers"],
-                            n_heads=lm["n_heads"], context=lm["context"]))
+                            n_heads=lm["n_heads"], context=lm["context"], loss_chunk=lm.get("loss_chunk", 0)))
     stats = train_lm(model, tokens, lm, cfg["seed"])
     rows, ru_bits, ru_bytes = [], 0.0, 0
     for d in cfg["corpus"]["domains"]:
@@ -47,8 +47,8 @@ def main() -> None:
         if args.smoke:
             r = rows[-1]
             est_h = r["train_tokens"] * (full_bytes / 1_000_000) / r["tokens_per_sec"] / 3600
-            print(json.dumps({"candidate": name, "tokens_per_sec": round(r["tokens_per_sec"]),
-                              "estimated_full_hours": round(est_h, 2)}))
+            print(json.dumps({"candidate": name, "device": r["device"], "tokens_per_sec": round(r["tokens_per_sec"]),
+                              "peak_gpu_gb": r["peak_gpu_gb"], "estimated_full_hours": round(est_h, 2)}), flush=True)
         out.parent.mkdir(parents=True, exist_ok=True)
         pd.DataFrame(all_rows).to_csv(out, index=False)  # сохраняем после каждого кандидата
     print(pd.DataFrame(all_rows).query("domain == 'ru_all'")[["candidate", "bpb", "train_tokens", "seconds"]])

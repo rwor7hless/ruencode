@@ -1,0 +1,16 @@
+# Мини-модели на видеокарте NVIDIA 8 ГБ (RTX 4060 Ti): uv sync --extra cu126
+base: experiments.yaml
+lm:
+  device: auto              # cuda, если есть, иначе cpu
+  d_model: 768              # ~85M параметров без эмбеддингов (масштаб GPT-2 small)
+  n_layers: 12
+  n_heads: 12
+  context: 512
+  batch_size: 8             # 4096 токенов на шаг; o200k: ~3.8 ГБ состояний + активации + куски softmax ≈ 6.7 ГБ
+  loss_chunk: 512           # softmax по словарю считается кусками по 512 токенов
+  lr: 0.0006
+  warmup_frac: 0.02
+  weight_decay: 0.1
+  train_bytes: 300000000    # 300 МБ текста на кандидата; уточнить по --smoke
+  eval_bytes_per_domain: 2000000
+  candidates: [bpe-64k, unigram-64k, morph-bpe-64k, o200k]

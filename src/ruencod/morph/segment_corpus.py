@@ -15,7 +15,7 @@ from ruencod.morph.project import CYR_WORD, Projector
 from ruencod.morph.tikhonov import download, load_lexicon, split_lemmas
 from ruencod.pretok import MARK, pretokenize
 
-_CTX = mp.get_context("fork")
+_CTX = mp.get_context("fork" if "fork" in mp.get_all_start_methods() else "spawn")  # Windows: spawn
 _PROJ: Projector | None = None
 _CACHE: dict[str, list[int]] | None = None
 

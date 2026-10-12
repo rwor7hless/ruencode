@@ -55,7 +55,7 @@ tok.tokenize("Нейросеть не читает буквы — она вид�
 ## Воспроизвести
 
 ```bash
-uv sync -p 3.12
+uv sync -p 3.12 --extra cpu      # или --extra cu126 для NVIDIA
 uv run python -m ruencod.data.build            # корпус → data/corpus
 uv run python -m ruencod.morph.segment_corpus  # морфемная разметка → data/morph_corpus
 uv run python -m ruencod.train.run --all       # 15 токенизаторов → artifacts/tokenizers
@@ -65,3 +65,32 @@ uv run pytest
 ```
 
 Настройки — `configs/experiments.yaml`. Дизайн и план — `docs/`.
+
+## Мини-модели на видеокарте (RTX 4060 Ti 8 ГБ)
+
+Проверка «с каким токенизатором модель учится лучше»: одна и та же модель (~85M параметров без
+эмбеддингов, 12 слоёв × 768) учится на одинаковых 300 МБ текста с каждым кандидатом
+(`bpe-64k`, `unigram-64k`, `morph-bpe-64k`, `o200k`), сравниваем бит на байт на отложенной выборке.
+
+1. Нужны драйвер NVIDIA ≥ 560, `git`, [`uv`](https://docs.astral.sh/uv/). Работает на Linux и Windows.
+2. Установка:
+   ```bash
+   git clone git@github.com:rwor7hless/ruencode.git && cd ruencode
+   uv sync -p 3.12 --extra cu126
+   uv run python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name())"
+   ```
+   Ожидается `True NVIDIA GeForce RTX 4060 Ti`.
+3. Корпус: скопировать папку `data/corpus/` (~1.5 ГБ) с машины, где он уже собран, по тому же пути —
+   или собрать заново: `uv run python -m ruencod.data.build` (~25 мин, нужен интернет).
+   Мини-моделям нужен только `data/corpus/`.
+4. Пробный прогон (1 МБ на кандидата) — скорость, пик видеопамяти и прогноз времени:
+   ```bash
+   uv run python -m ruencod.lm.run --config configs/gpu.yaml --smoke
+   ```
+   Если `peak_gpu_gb` больше ~7.5 — уменьшить в `configs/gpu.yaml` `batch_size` до 4 или `loss_chunk` до 256.
+   Если `estimated_full_hours` слишком велико — уменьшить `train_bytes`.
+5. Полный прогон и график:
+   ```bash
+   uv run python -m ruencod.lm.run --config configs/gpu.yaml   # → results/lm_bpb.csv
+   uv run python -m ruencod.viz.charts                         # → results/figures/5_lm_bpb.png
+   ```

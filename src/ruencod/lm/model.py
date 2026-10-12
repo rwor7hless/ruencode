@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import torch
 import torch.nn.functional as F
 from torch import nn
+from torch.utils.checkpoint import checkpoint
 
 
 @dataclass
@@ -12,6 +13,7 @@ class LMConfig:
     n_layers: int = 6
     n_heads: int = 6
     context: int = 512
+    loss_chunk: int = 0  # >0: считать softmax кусками по столько токенов (экономия памяти на больших словарях)
 
 
 def rope_cache(seq_len: int, head_dim: int, base: float = 10000.0):
@@ -48,6 +50,10 @@ class Block(nn.Module):
         return x + self.fc2(F.gelu(self.fc1(self.ln2(x))))
 
 
+def _chunk_ce(h, y, w):
+    return F.cross_entropy((h @ w.T).float(), y, reduction="sum")
+
+
 class TinyLM(nn.Module):
     def __init__(self, c: LMConfig):
         super().__init__()
@@ -66,11 +72,21 @@ class TinyLM(nn.Module):
         x = self.emb(idx)
         for blk in self.blocks:
             x = blk(x, self.cos, self.sin)
-        logits = self.ln_f(x) @ self.emb.weight.T  # связанные эмбеддинги
+        h = self.ln_f(x)
         if targets is None:
-            return logits, None
-        loss = F.cross_entropy(logits.view(-1, self.c.vocab_size), targets.reshape(-1), reduction=reduction)
-        return logits, loss
+            return h @ self.emb.weight.T, None  # связанные эмбеддинги
+        if not self.c.loss_chunk:
+            logits = h @ self.emb.weight.T
+            loss = F.cross_entropy(logits.view(-1, self.c.vocab_size).float(), targets.reshape(-1), reduction=reduction)
+            return logits, loss
+        # логиты по всему словарю для всего батча не держим: считаем кусками и пересчитываем на backward
+        flat_h, flat_y = h.reshape(-1, h.shape[-1]), targets.reshape(-1)
+        total = sum(
+            checkpoint(_chunk_ce, flat_h[i:i + self.c.loss_chunk], flat_y[i:i + self.c.loss_chunk],
+                       self.emb.weight, use_reentrant=False)
+            for i in range(0, flat_y.numel(), self.c.loss_chunk)
+        )
+        return None, total if reduction == "sum" else total / flat_y.numel()
 
     def non_embedding_params(self) -> int:
         return sum(p.numel() for n, p in self.named_parameters() if not n.startswith("emb"))

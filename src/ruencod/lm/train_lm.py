@@ -1,3 +1,4 @@
+import contextlib
 import math
 import time
 
@@ -18,9 +19,25 @@ def encode_corpus(tok, texts) -> np.ndarray:
     return np.fromiter((i for p in parts for i in p), dtype=np.uint32)
 
 
+def pick_device(pref: str = "auto") -> str:
+    if pref == "auto":
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    return pref
+
+
+def autocast(device: str):
+    """bf16 на видеокарте (Ampere/Ada и новее), на CPU — обычный fp32."""
+    if device == "cuda":
+        return torch.autocast(device_type="cuda", dtype=torch.bfloat16)
+    return contextlib.nullcontext()
+
+
 def train_lm(model, tokens: np.ndarray, lm_cfg: dict, seed: int, log_every: int = 50) -> dict:
     torch.manual_seed(seed)
-    torch.set_num_threads(lm_cfg["threads"])
+    device = pick_device(lm_cfg.get("device", "auto"))
+    if device == "cpu":
+        torch.set_num_threads(lm_cfg["threads"])
+    model.to(device)
     ctx, bs = lm_cfg["context"], lm_cfg["batch_size"]
     n_chunks = (len(tokens) - 1) // ctx
     order = np.random.default_rng(seed).permutation(n_chunks)
@@ -36,7 +53,7 @@ def train_lm(model, tokens: np.ndarray, lm_cfg: dict, seed: int, log_every: int 
     for step in range(steps):
         idx = order[step * bs:(step + 1) * bs]
         win = np.stack([tokens[i * ctx:i * ctx + ctx + 1] for i in idx]).astype(np.int64)
-        x, y = torch.from_numpy(win[:, :-1]), torch.from_numpy(win[:, 1:])
+        x, y = torch.from_numpy(win[:, :-1]).to(device), torch.from_numpy(win[:, 1:]).to(device)
         if step < warmup:
             lr = lr_max * (step + 1) / warmup
         else:
@@ -44,7 +61,8 @@ def train_lm(model, tokens: np.ndarray, lm_cfg: dict, seed: int, log_every: int 
             lr = lr_min + 0.5 * (lr_max - lr_min) * (1 + math.cos(math.pi * prog))
         for g in opt.param_groups:
             g["lr"] = lr
-        _, loss = model(x, y)
+        with autocast(device):
+            _, loss = model(x, y)
         opt.zero_grad(set_to_none=True)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -55,5 +73,6 @@ def train_lm(model, tokens: np.ndarray, lm_cfg: dict, seed: int, log_every: int 
             print(f"step {step}/{steps} loss {loss_val:.3f} tok/s {done / (time.time() - t0):.0f}", flush=True)
     secs = time.time() - t0
     trained = n_chunks * ctx
-    return {"steps": steps, "train_tokens": trained, "seconds": round(secs, 1),
-            "tokens_per_sec": trained / secs if secs else 0.0, "final_loss": loss_val}
+    peak = torch.cuda.max_memory_allocated() / 1e9 if device == "cuda" else None
+    return {"device": device, "steps": steps, "train_tokens": trained, "seconds": round(secs, 1),
+            "tokens_per_sec": trained / secs if secs else 0.0, "final_loss": loss_val, "peak_gpu_gb": peak}

@@ -14,7 +14,6 @@ dependencies = [
   "sentencepiece",
   "protobuf",
   "anthropic",
-  "torch",
   "numpy",
   "matplotlib",
   "pillow",
@@ -23,6 +22,11 @@ dependencies = [
   "zstandard",
   "tqdm",
 ]
+
+[project.optional-dependencies]
+# ровно одно из двух: `uv sync --extra cpu` (без видеокарты) или `uv sync --extra cu126` (NVIDIA)
+cpu = ["torch==2.14.1"]
+cu126 = ["torch==2.14.1"]
 
 [dependency-groups]
 dev = ["pytest"]
@@ -34,12 +38,23 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/ruencod"]
 
+[tool.uv]
+conflicts = [[{ extra = "cpu" }, { extra = "cu126" }]]
+
 [tool.uv.sources]
-torch = { index = "pytorch-cpu" }
+torch = [
+  { index = "pytorch-cpu", extra = "cpu" },
+  { index = "pytorch-cu126", extra = "cu126" },
+]
 
 [[tool.uv.index]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
 explicit = true
 
 [tool.pytest.ini_options]
