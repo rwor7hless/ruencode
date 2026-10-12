@@ -1,0 +1,47 @@
+[project]
+name = "ruencod"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "tokenizers>=0.23",
+  "transformers>=4.45",
+  "datasets>=3.0",
+  "huggingface_hub",
+  "pymorphy3",
+  "pymorphy3-dicts-ru",
+  "regex",
+  "tiktoken",
+  "sentencepiece",
+  "protobuf",
+  "anthropic",
+  "torch",
+  "numpy",
+  "matplotlib",
+  "pillow",
+  "pandas",
+  "pyyaml",
+  "zstandard",
+  "tqdm",
+]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ruencod"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

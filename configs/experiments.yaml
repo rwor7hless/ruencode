@@ -1,0 +1,131 @@
+seed: 42
+paths:
+  data: data
+  artifacts: artifacts
+  results: results
+
+corpus:
+  total_bytes: 5000000000
+  heldout_bytes_per_domain: 50000000
+  min_chars: 200
+  max_chars: 100000
+  min_cyrillic_ratio: 0.6
+  domains:
+    web:
+      share: 0.30
+      russian: true
+      sources:
+        - {kind: hf, path: HuggingFaceFW/fineweb-2, name: rus_Cyrl, split: train, text: text}
+    wiki:
+      share: 0.15
+      russian: true
+      sources:
+        - {kind: hf, path: wikimedia/wikipedia, name: 20231101.ru, split: train, text: text}
+    social:
+      share: 0.15
+      russian: true
+      sources:
+        - {kind: pikabu}
+    it:
+      share: 0.10
+      russian: true
+      sources:
+        - {kind: hf, path: volosati/habr, split: train, text: text_markdown, filter: {language: ru}}
+    books:
+      share: 0.10
+      russian: true
+      sources:
+        - {kind: hf, path: wikimedia/wikisource, name: 20231201.ru, split: train, text: text}
+    news:
+      share: 0.10
+      russian: true
+      sources:
+        - {kind: hf, path: IlyaGusev/gazeta, split: train, text: text, share: 0.5}
+        - kind: hf
+          path: HuggingFaceFW/fineweb-2
+          name: rus_Cyrl
+          split: train
+          text: text
+          share: 0.5
+          url_domains: [ria.ru, tass.ru, lenta.ru, rbc.ru, interfax.ru, kommersant.ru, iz.ru, rg.ru, gazeta.ru, fontanka.ru, meduza.io, vedomosti.ru]
+    niche:
+      share: 0.05
+      russian: true
+      sources:
+        - {kind: hf, path: irlspbru/RusLawOD, split: train, text: textIPS, shuffle_buffer: 500}
+    en_code:
+      share: 0.05
+      russian: false
+      sources:
+        - {kind: hf, path: HuggingFaceFW/fineweb-edu, name: sample-10BT, split: train, text: text, share: 0.5}
+        - {kind: hf, path: bigcode/the-stack-smol-xl, split: train, text: content, share: 0.5}
+
+morph:
+  tikhonov_urls:
+    - https://raw.githubusercontent.com/AlexeySorokin/NeuralMorphemeSegmentation/master/data/train_Tikhonov_reformat.txt
+    - https://raw.githubusercontent.com/AlexeySorokin/NeuralMorphemeSegmentation/master/data/test_Tikhonov_reformat.txt
+  test_frac: 0.1
+  min_word_freq: 5
+  workers: 8
+
+train:
+  vocab_sizes: [16000, 32000, 48000, 64000, 96000]
+  algos: [bpe, unigram, morph-bpe]
+  bpe_max_bytes: null          # null = весь train; уменьшить при нехватке RAM
+  unigram_max_bytes: 1500000000
+  bpe_min_frequency: 2
+
+eval:
+  max_bytes_per_domain: 50000000
+  claude:
+    models: [claude-opus-5]
+    docs_per_domain: 200
+  baselines:
+    - {name: o200k, label: "GPT-4o/GPT-5 (o200k)", kind: tiktoken, id: o200k_base}
+    - {name: cl100k, label: "GPT-4 (cl100k)", kind: tiktoken, id: cl100k_base}
+    - {name: llama-3, label: "Llama 3", kind: hf, id: NousResearch/Meta-Llama-3-8B}
+    - {name: qwen-3, label: "Qwen 3", kind: hf, id: Qwen/Qwen3-8B}
+    - {name: mistral-nemo, label: "Mistral Nemo", kind: hf, id: unsloth/Mistral-Nemo-Base-2407}
+    - {name: gemma-3, label: "Gemma 3", kind: hf, id: unsloth/gemma-3-1b-it}
+    - {name: rugpt-3, label: "ruGPT-3", kind: hf, id: ai-forever/rugpt3large_based_on_gpt2}
+    - {name: vikhr, label: "Vikhr 7B", kind: hf, id: Vikhrmodels/Vikhr-7B-instruct_0.4}
+    - {name: gigachat, label: "GigaChat (open)", kind: hf, id: ai-sage/GigaChat-20B-A3B-instruct}
+    - {name: yandexgpt-5-lite, label: "YandexGPT 5 Lite", kind: sentencepiece, id: yandex/YandexGPT-5-Lite-8B-pretrain, file: tokenizer.model}
+
+prices:
+  verified_on: "2026-10-12"
+  gpt:
+    label: "GPT-4o"
+    tokenizer: o200k
+    usd_per_mtok: 2.50
+    source: https://openai.com/api/pricing
+  claude:
+    label: "Claude Opus 5"
+    tokenizer: claude-opus-5
+    usd_per_mtok: 5.00
+    source: https://docs.claude.com/en/docs/about-claude/pricing
+
+lm:
+  context: 512
+  d_model: 384
+  n_layers: 6
+  n_heads: 6
+  batch_size: 16
+  lr: 0.001
+  warmup_frac: 0.02
+  weight_decay: 0.1
+  train_bytes: 30000000        # пересчитывается по smoke-run
+  eval_bytes_per_domain: 2000000
+  threads: 20
+  candidates: []               # заполняется после выбора V
+
+final:
+  tokenizer: null              # заполняется после выбора финалиста
+
+examples:
+  - "достопримечательностями"
+  - "переподготовка"
+  - "нейросеть"
+  - "1234567"
+  - "Я написал скрипт на Python, который парсит JSON и шлёт в Telegram."
+  - "Нейросеть не читает буквы — она видит токены."

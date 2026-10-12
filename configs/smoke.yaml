@@ -1,0 +1,26 @@
+base: experiments.yaml
+paths:
+  data: data_smoke
+  artifacts: artifacts_smoke
+  results: results_smoke
+corpus:
+  total_bytes: 30000000
+  heldout_bytes_per_domain: 1000000
+morph:
+  min_word_freq: 2
+  workers: 4
+train:
+  vocab_sizes: [2000, 4000]
+  unigram_max_bytes: 10000000
+eval:
+  max_bytes_per_domain: 1000000
+  claude:
+    docs_per_domain: 0
+  baselines:
+    - {name: o200k, label: "GPT-4o/GPT-5 (o200k)", kind: tiktoken, id: o200k_base}
+lm:
+  train_bytes: 1000000
+  eval_bytes_per_domain: 100000
+  candidates: [bpe-4k, morph-bpe-4k]
+final:
+  tokenizer: bpe-4k

@@ -4,3 +4,7 @@ artifacts/tokenizers/
 __pycache__/
 *.pyc
 .env
+data_smoke/
+artifacts_smoke/
+results_smoke/
+.superpowers/
