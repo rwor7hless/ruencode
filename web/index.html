@@ -85,7 +85,7 @@
     <p class="note">Точка «·» — пробел, который токен забирает себе. Красное «²» — сколько токенов ушло на кусок, который не совпадает с границей буквы (байтовые обрывки).</p>
   </section>
 
-  <section class="row">
+  <section class="row" id="claude-section">
     <h2>А Claude?</h2>
     <p class="note" id="claude-note">Словарь Claude закрыт: показать разбиение нельзя, но число токенов можно узнать через API. Ниже — заранее посчитанные примеры.</p>
     <div class="table-wrap"><table id="claude-table"></table></div>
@@ -159,9 +159,13 @@ async function boot() {
       b.addEventListener("click", () => { input.value = e.text; update(); });
       return b;
     }));
-    $("claude-table").innerHTML =
-      `<tr><th>Текст</th><th class="n">GPT-4o</th><th class="n">${esc(ex.claude_label)}</th><th class="n">ruEncod</th></tr>` +
-      ex.examples.map((e) => `<tr><td>${esc(e.text)}</td><td class="n">${e.gpt_tokens}</td><td class="n">${e.claude_tokens}</td><td class="n">${e.ours_tokens}</td></tr>`).join("");
+    if (ex.claude_label) {
+      $("claude-table").innerHTML =
+        `<tr><th>Текст</th><th class="n">GPT-4o</th><th class="n">${esc(ex.claude_label)}</th><th class="n">ruEncod</th></tr>` +
+        ex.examples.map((e) => `<tr><td>${esc(e.text)}</td><td class="n">${e.gpt_tokens}</td><td class="n">${e.claude_tokens}</td><td class="n">${e.ours_tokens}</td></tr>`).join("");
+    } else {
+      $("claude-note").textContent = "Словарь Claude закрыт: ни разбиение, ни число токенов нельзя посчитать без ключа Anthropic API, поэтому здесь сравнение только с открытыми словарями.";
+    }
     input.addEventListener("input", update);
     update();
   } catch (err) {

@@ -69,14 +69,18 @@ def make_all(cfg: dict, claude_client=None) -> list[Path]:
     if morph != cfg["final"]["tokenizer"]:
         names.append(morph)
     toks = [resolve(cfg, n) for n in names]
-    counter = ClaudeCounter(cfg["prices"]["claude"]["tokenizer"], cfg_path(cfg, "results") / "claude_cache.json",
-                            client=claude_client)
+    counter = None
+    if cfg["eval"]["claude"]["models"]:
+        counter = ClaudeCounter(cfg["prices"]["claude"]["tokenizer"],
+                                cfg_path(cfg, "results") / "claude_cache.json", client=claude_client)
     paths = []
     for i, text in enumerate(cfg["examples"]):
         rows = [(_label(cfg, t.name), aligned_pieces(t, text)) for t in toks]
-        rows.insert(1, (cfg["prices"]["claude"]["label"], f"{counter.count(text)} токенов (разбиение закрыто)"))
+        if counter:
+            rows.insert(1, (cfg["prices"]["claude"]["label"], f"{counter.count(text)} токенов (разбиение закрыто)"))
         paths.append(render(rows, text, figs / f"split_{i}.png"))
-    counter.save()
+    if counter:
+        counter.save()
     return paths
 
 

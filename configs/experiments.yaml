@@ -72,8 +72,8 @@ train:
 eval:
   max_bytes_per_domain: 50000000
   claude:
-    models: [claude-opus-5]
-    docs_per_domain: 200
+    models: []                 # без ключа API Claude не считаем; вернуть [claude-opus-5] и docs_per_domain: 200
+    docs_per_domain: 0
   baselines:
     - {name: o200k, label: "GPT-4o/GPT-5 (o200k)", kind: tiktoken, id: o200k_base}
     - {name: cl100k, label: "GPT-4 (cl100k)", kind: tiktoken, id: cl100k_base}

@@ -54,3 +54,45 @@ def test_render_split(tmp_path):
                   ("ruEncod", [("достопримечательн", 1), ("остями", 1)])],
                  "достопримечательностями", tmp_path / "s.png")
     assert out.exists() and out.stat().st_size > 1000
+
+
+class _NoClient:
+    """Любое обращение к Claude API в режиме без Claude — ошибка теста."""
+    @property
+    def messages(self):
+        raise AssertionError("Claude API must not be called when eval.claude.models is empty")
+
+
+def _cfg_no_claude(tmp_path):
+    cfg = _cfg(tmp_path)
+    cfg["eval"]["claude"] = {"models": [], "docs_per_domain": 0}
+    cfg["paths"]["artifacts"] = str(tmp_path / "art")
+    cfg["examples"] = ["Привет, мир!"]
+    return cfg
+
+
+def _save_tok(tmp_path, name):
+    from ruencod.train.tokenizer import save_tokenizer, train_tokenizer
+    from tests.conftest import make_corpus
+    save_tokenizer(train_tokenizer(make_corpus(), "bpe", 700), tmp_path / "art" / "tokenizers" / name)
+
+
+def test_summary_without_claude(tmp_path, monkeypatch):
+    from ruencod.viz import summary
+    _write(tmp_path, with_claude=False)
+    _save_tok(tmp_path, "bpe-32k")
+    _save_tok(tmp_path, "o200k")  # подменяем baseline локальным токенизатором — без сети
+    monkeypatch.setattr(summary, "ROOT", tmp_path)
+    s = summary.make(_cfg_no_claude(tmp_path), claude_client=_NoClient())
+    assert "claude" not in s["fertility"] and s["savings_vs_gpt_pct"] > 0
+    ex = __import__("json").loads((tmp_path / "web" / "examples.json").read_text())
+    assert ex["claude_label"] is None and "claude_tokens" not in ex["examples"][0]
+
+
+def test_splits_without_claude(tmp_path):
+    from ruencod.viz import splits
+    cfg = _cfg_no_claude(tmp_path)
+    for n in ("bpe-32k", "morph-bpe-32k", "o200k", "llama-3"):
+        _save_tok(tmp_path, n)
+    paths = splits.make_all(cfg, claude_client=_NoClient())
+    assert len(paths) == 1 and paths[0].exists()
