@@ -20,7 +20,7 @@ def _shown(piece: str) -> str:
 
 def render(rows, title: str, out: Path, width: int = 1600) -> Path:
     big, small = ImageFont.truetype(_FONT, 34), ImageFont.truetype(_FONT, 26)
-    label_w, pad, line_h = 330, 24, 64
+    label_w, pad, line_h = 400, 24, 64
     lines = []
     for label, content in rows:
         if isinstance(content, str):
@@ -29,7 +29,7 @@ def render(rows, title: str, out: Path, width: int = 1600) -> Path:
         x, n_rows = label_w, 1
         for text, _ in content:
             w = big.getlength(_shown(text)) + 20
-            if x + w > width - pad - 180:
+            if x + w > width - pad - 230:
                 x, n_rows = label_w, n_rows + 1
             x += w + 6
         lines.append((label, content, n_rows))
@@ -48,14 +48,14 @@ def render(rows, title: str, out: Path, width: int = 1600) -> Path:
             for i, (text, n) in enumerate(content):
                 s = _shown(text)
                 w = big.getlength(s) + 20
-                if x + w > width - pad - 180:
+                if x + w > width - pad - 230:
                     x, row_y = label_w, row_y + line_h
                 d.rounded_rectangle([x, row_y, x + w, row_y + 52], 8, fill=COLORS[i % len(COLORS)])
                 d.text((x + 10, row_y + 6), s, font=big, fill="#0b0b0b")
                 if n > 1:
                     d.text((x + w - 30, row_y - 8), f"×{n}", font=small, fill="#d03b3b")
                 x += w + 6
-            d.text((width - pad - 170, y + 14), f"{total} ток.", font=small, fill="#52514e")
+            d.text((width - pad - 190, y + 14), f"{total} ток.", font=small, fill="#52514e")
         y += n_rows * line_h + 30
     out.parent.mkdir(parents=True, exist_ok=True)
     img.save(out)

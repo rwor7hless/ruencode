@@ -1,0 +1,19 @@
+{
+  "final": "bpe-64k",
+  "fertility_metric": "fertility",
+  "fertility": {
+    "final": 1.7468399328746729,
+    "gpt": 2.1557741670882944
+  },
+  "savings_vs_gpt_pct": 18.969251995720416,
+  "usd_per_1000_words": {
+    "gpt": 0.005389435417720736,
+    "final_at_gpt_price": 0.004367099832186682
+  },
+  "prices_verified_on": "2026-10-12",
+  "morph_coverage": {
+    "covered_token_share": 0.4929636183339428,
+    "unique_words": 2956079,
+    "cached_words": 356102
+  }
+}
