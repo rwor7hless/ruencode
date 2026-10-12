@@ -1,6 +1,7 @@
 import argparse
 import hashlib
 import json
+import os
 import random
 
 from tqdm import tqdm
@@ -80,7 +81,10 @@ def main() -> None:
     ap.add_argument("--domains", nargs="*")
     args = ap.parse_args()
     stats = build(load_config(args.config), args.domains)
-    print(json.dumps(stats, ensure_ascii=False, indent=2))
+    print(json.dumps(stats, ensure_ascii=False, indent=2), flush=True)
+    # потоковые загрузчики datasets оставляют фоновые потоки, из-за которых интерпретатор
+    # может зависнуть или упасть при выходе; всё уже записано на диск — выходим сразу
+    os._exit(0)
 
 
 if __name__ == "__main__":
