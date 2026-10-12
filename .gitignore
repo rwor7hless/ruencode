@@ -1,10 +1,10 @@
-data/
-artifacts/tokenizers/
+/data/
+/artifacts/tokenizers/
+/data_smoke/
+/artifacts_smoke/
+/results_smoke/
+/.superpowers/
 .venv/
 __pycache__/
 *.pyc
 .env
-data_smoke/
-artifacts_smoke/
-results_smoke/
-.superpowers/
