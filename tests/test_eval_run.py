@@ -41,3 +41,21 @@ def test_run_eval_end_to_end(tmp_path):
     assert get("claude-opus-5", "ru_all", "fertility_claude_sample") > 0
     assert get("bpe-0k", "ru_all", "fertility_claude_sample") > 0
     assert pd.read_csv(tmp_path / "res" / "metrics.csv").shape[0] == df.shape[0]
+
+
+def test_sample_mode_keeps_full_metrics(tmp_path):
+    cfg = _cfg(tmp_path)
+    cfg["eval"]["claude"]["docs_per_domain"] = 0
+    data = tmp_path / "data"
+    with ZstJsonlWriter(domain_file(data / "corpus", "heldout", "web")) as w:
+        for t in make_corpus(20, seed=5):
+            w.write({"text": t})
+    save_tokenizer(train_tokenizer(make_corpus(), "bpe", 700), tmp_path / "art" / "tokenizers" / "bpe-0k")
+    run_eval(cfg)  # полная оценка без Claude
+
+    cfg["eval"]["claude"]["docs_per_domain"] = 3
+    df = run_eval(cfg, only="sample", claude_client=FakeClient())
+    has = lambda tok, m: ((df.tokenizer == tok) & (df.metric == m)).any()
+    assert has("bpe-0k", "fertility") and has("bpe-0k", "roundtrip"), "полные метрики сохранились"
+    assert has("bpe-0k", "fertility_claude_sample") and has("claude-opus-5", "fertility_claude_sample")
+    assert not df.duplicated(["tokenizer", "domain", "metric"]).any()

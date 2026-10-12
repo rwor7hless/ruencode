@@ -67,6 +67,11 @@ def _evaluate(tok, kind, heldout, ru, word_counts, morph_items, claude_sample) -
     return rows
 
 
+def _sample_only(tok, kind, claude_sample, ru) -> list[dict]:
+    tokens = {d: sum(map(len, tok.encode_batch(t))) for d, t in claude_sample.items()}
+    return _sample_rows(tok.name, kind, tokens, claude_sample, ru)
+
+
 def run_eval(cfg: dict, only: str = "all", claude_client=None) -> pd.DataFrame:
     heldout = _load_heldout(cfg)
     ru = set(russian_domains(cfg))
@@ -76,29 +81,32 @@ def run_eval(cfg: dict, only: str = "all", claude_client=None) -> pd.DataFrame:
     claude_sample = {d: texts[:n] for d, texts in heldout.items()} if n else {}
 
     toks = []
-    if only in ("all", "ours"):
+    if only in ("all", "ours", "sample"):
         toks += [(load_ours(p), "ours") for p in list_ours(cfg)]
-    if only in ("all", "baselines"):
+    if only in ("all", "baselines", "sample"):
         toks += [(load_baseline(s), "baseline") for s in cfg["eval"]["baselines"]]
 
-    rows, evaluated = [], set()
+    rows = []
     for tok, kind in tqdm(toks, desc="tokenizers"):
-        rows += _evaluate(tok, kind, heldout, ru, word_counts, morph_items, claude_sample)
-        evaluated.add(tok.name)
+        if only == "sample":  # только выборка для сравнения с Claude, полные метрики не пересчитываем
+            rows += _sample_only(tok, kind, claude_sample, ru)
+        else:
+            rows += _evaluate(tok, kind, heldout, ru, word_counts, morph_items, claude_sample)
 
-    if only in ("all", "claude") and claude_sample:
+    if only in ("all", "claude", "sample") and claude_sample:
         for model in cfg["eval"]["claude"]["models"]:
             counter = ClaudeCounter(model, cfg_path(cfg, "results") / "claude_cache.json", client=claude_client)
             tokens = {d: sum(counter.count_many(texts)) for d, texts in claude_sample.items()}
             rows += _sample_rows(model, "claude", tokens, claude_sample, ru)
-            evaluated.add(model)
 
     new = pd.DataFrame(rows, columns=COLUMNS)
     out = cfg_path(cfg, "results") / "metrics.csv"
     out.parent.mkdir(parents=True, exist_ok=True)
-    if out.exists():
+    if out.exists():  # заменяем только пересчитанные (tokenizer, domain, metric), остальное сохраняем
         old = pd.read_csv(out)
-        new = pd.concat([old[~old.tokenizer.isin(evaluated)], new], ignore_index=True)
+        key = ["tokenizer", "domain", "metric"]
+        fresh = old.merge(new[key], on=key, how="left", indicator=True)["_merge"] == "left_only"
+        new = pd.concat([old[fresh.values], new], ignore_index=True)
     new.to_csv(out, index=False)
     return new
 
@@ -106,7 +114,7 @@ def run_eval(cfg: dict, only: str = "all", claude_client=None) -> pd.DataFrame:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default=str(DEFAULT_CONFIG))
-    ap.add_argument("--only", default="all", choices=["all", "ours", "baselines", "claude"])
+    ap.add_argument("--only", default="all", choices=["all", "ours", "baselines", "claude", "sample"])
     args = ap.parse_args()
     df = run_eval(load_config(args.config), args.only)
     view = df[(df.domain == "ru_all") & (df.metric.isin(["fertility", "fertility_claude_sample"]))]

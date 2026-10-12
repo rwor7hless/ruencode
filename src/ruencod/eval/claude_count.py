@@ -4,12 +4,28 @@ import os
 from pathlib import Path
 
 
+def load_dotenv(path: Path) -> None:
+    """Минимальный .env: KEY=VALUE построчно; уже заданные переменные окружения не трогаем."""
+    path = Path(path)
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip("'\""))
+
+
 class ClaudeCounter:
     """Точный подсчёт токенов Claude через messages.count_tokens с дисковым кэшем."""
 
     def __init__(self, model: str, cache_path: Path, client=None):
         if client is None:
             import anthropic
+
+            from ruencod.config import ROOT
+            load_dotenv(ROOT / ".env")
             client = anthropic.Anthropic(max_retries=8)
         self.model, self.cache_path, self.client = model, Path(cache_path), client
         self.cache: dict[str, int] = json.loads(self.cache_path.read_text()) if self.cache_path.exists() else {}

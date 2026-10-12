@@ -37,3 +37,16 @@ def test_cache_is_per_model(tmp_path):
     client2 = FakeClient()
     ClaudeCounter("m2", cache, client=client2).count("x")
     assert client2.messages.calls > 0
+
+
+def test_load_dotenv_sets_missing_but_keeps_existing(tmp_path, monkeypatch):
+    from ruencod.eval.claude_count import load_dotenv
+    env = tmp_path / ".env"
+    env.write_text("# комментарий\nANTHROPIC_API_KEY=sk-ant-test\nOTHER='x y'\n")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("OTHER", "keep")
+    load_dotenv(env)
+    import os
+    assert os.environ["ANTHROPIC_API_KEY"] == "sk-ant-test"
+    assert os.environ["OTHER"] == "keep"
+    load_dotenv(tmp_path / "missing.env")  # нет файла — не падаем
