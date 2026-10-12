@@ -33,11 +33,10 @@ def render(rows, title: str, out: Path, width: int = 1600) -> Path:
                 x, n_rows = label_w, n_rows + 1
             x += w + 6
         lines.append((label, content, n_rows))
-    height = 120 + sum(n * line_h + 30 for *_, n in lines)
+    height = 40 + sum(n * line_h + 30 for *_, n in lines)
     img = Image.new("RGB", (width, height), "#fcfcfb")
     d = ImageDraw.Draw(img)
-    d.text((pad, 30), title, font=big, fill="#0b0b0b")
-    y = 110
+    y = 30
     for label, content, n_rows in lines:
         d.text((pad, y + 14), label, font=small, fill="#52514e")
         if isinstance(content, str):
