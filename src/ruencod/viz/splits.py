@@ -68,7 +68,12 @@ def make_all(cfg: dict, claude_client=None) -> list[Path]:
     morph = "morph-" + cfg["final"]["tokenizer"].replace("morph-", "").replace("unigram", "bpe")
     if morph != cfg["final"]["tokenizer"]:
         names.append(morph)
-    toks = [resolve(cfg, n) for n in names]
+    toks = []
+    for n in names:
+        try:
+            toks.append(resolve(cfg, n))
+        except KeyError:  # нет в конфиге/артефактах (например, в smoke) — строку пропускаем
+            print(f"skip {n}: not available")
     counter = None
     if cfg["eval"]["claude"]["models"]:
         counter = ClaudeCounter(cfg["prices"]["claude"]["tokenizer"],

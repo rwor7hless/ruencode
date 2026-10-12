@@ -96,3 +96,12 @@ def test_splits_without_claude(tmp_path):
         _save_tok(tmp_path, n)
     paths = splits.make_all(cfg, claude_client=_NoClient())
     assert len(paths) == 1 and paths[0].exists()
+
+
+def test_splits_skip_unavailable_tokenizers(tmp_path):
+    from ruencod.viz import splits
+    cfg = _cfg_no_claude(tmp_path)
+    for n in ("bpe-32k", "o200k"):  # ни llama-3, ни morph-bpe-32k нет
+        _save_tok(tmp_path, n)
+    paths = splits.make_all(cfg, claude_client=_NoClient())
+    assert len(paths) == 1 and paths[0].exists()
