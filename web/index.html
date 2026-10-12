@@ -1,0 +1,173 @@
+<title>Токенометр</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --ground: #f5f6f3; --panel: #ffffff; --ink: #15171a; --muted: #5b6068; --line: #dfe1dc;
+    --ours: #2a78d6; --gpt: #8a8d93; --claude: #eb6834;
+    --t1: #cde2fb; --t2: #fbd9c9; --t3: #c9efe0; --t4: #fbe6b8; --multi: #d03b3b;
+    --display: "Unbounded", "Segoe UI", system-ui, sans-serif;
+    --body: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --ground: #141618; --panel: #1c1f22; --ink: #eef0f2; --muted: #a2a7ae; --line: #30353a;
+      --ours: #5598e7; --gpt: #9a9da3; --claude: #f07c4f;
+      --t1: #1f3d63; --t2: #5b3424; --t3: #1d4a3b; --t4: #5a4515; --multi: #ff7b7b;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground: #141618; --panel: #1c1f22; --ink: #eef0f2; --muted: #a2a7ae; --line: #30353a;
+    --ours: #5598e7; --gpt: #9a9da3; --claude: #f07c4f;
+    --t1: #1f3d63; --t2: #5b3424; --t3: #1d4a3b; --t4: #5a4515; --multi: #ff7b7b;
+  }
+  body { background: var(--ground); color: var(--ink); font: 16px/1.55 var(--body); }
+  main { max-width: 860px; margin: 0 auto; padding-inline: 16px; padding-block: 32px 56px; display: grid; gap: 28px; }
+  h1 { font: 700 clamp(1.6rem, 4.5vw, 2.4rem)/1.15 var(--display); margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+  h2 { font: 500 1.05rem/1.3 var(--display); margin: 0; }
+  .lede { color: var(--muted); max-width: 62ch; margin: 8px 0 0; }
+  label.cap { font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  textarea { width: 100%; box-sizing: border-box; min-height: 120px; font: 1rem/1.5 var(--body); color: var(--ink);
+             background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; resize: vertical; }
+  textarea:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
+  .examples { display: flex; flex-wrap: wrap; gap: 8px; }
+  .examples button { font: .85rem var(--body); color: var(--ink); background: transparent; border: 1px solid var(--line);
+                     border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+  .examples button:hover, .examples button:focus-visible { border-color: var(--ours); outline: none; }
+  .results { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: grid; gap: 18px; }
+  .row { display: grid; gap: 8px; }
+  .row header { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .name { font-weight: 600; }
+  .count { margin-left: auto; font: 500 .95rem var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); }
+  .tokens { font: 1rem/2 var(--mono); word-break: break-word; }
+  .tok { padding: 2px 3px; margin-right: 2px; border-radius: 4px; white-space: pre-wrap; }
+  .tok sup { color: var(--multi); font-size: .7em; margin-left: 1px; }
+  .verdict { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 16px; }
+  .verdict b { font: 700 2.2rem/1 var(--display); color: var(--ours); font-variant-numeric: tabular-nums; }
+  .verdict span { color: var(--muted); max-width: 46ch; }
+  .note { font-size: .88rem; color: var(--muted); max-width: 66ch; }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: .95rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { font-weight: 600; font-size: .78rem; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+  td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+  th.n { text-align: right; }
+  #status { color: var(--muted); font-size: .9rem; }
+  @media (prefers-reduced-motion: no-preference) { .tok { transition: background-color .15s; } }
+</style>
+
+<main>
+  <section>
+    <h1>Как нейросеть видит русский текст</h1>
+    <p class="lede">Модель читает не буквы, а токены — куски слов из своего словаря. Словари GPT и Claude обучены в основном на английском, поэтому русское слово режется на больше кусков, а платим мы за каждый кусок. Ниже — тот же текст глазами GPT-4o и токенизатора ruEncod, обученного только на русском.</p>
+  </section>
+
+  <section class="row">
+    <label class="cap" for="input">Ваш текст</label>
+    <textarea id="input">Нейросеть не читает буквы — она видит токены. Достопримечательностями Москвы любовались туристы, а переподготовка специалистов займёт 3 месяца.</textarea>
+    <div class="examples" id="examples" aria-label="Примеры"></div>
+  </section>
+
+  <section class="results" aria-live="polite">
+    <div class="row">
+      <header><span class="swatch" style="background: var(--gpt)"></span><span class="name">GPT-4o (o200k)</span><span class="count" id="gpt-count">…</span></header>
+      <div class="tokens" id="gpt"></div>
+    </div>
+    <div class="row">
+      <header><span class="swatch" style="background: var(--ours)"></span><span class="name">ruEncod</span><span class="count" id="ours-count">…</span></header>
+      <div class="tokens" id="ours"></div>
+    </div>
+    <div class="verdict"><b id="delta">—</b><span id="delta-text">Загружаю словари…</span></div>
+    <p class="note">Точка «·» — пробел, который токен забирает себе. Красное «²» — сколько токенов ушло на кусок, который не совпадает с границей буквы (байтовые обрывки).</p>
+  </section>
+
+  <section class="row">
+    <h2>А Claude?</h2>
+    <p class="note" id="claude-note">Словарь Claude закрыт: показать разбиение нельзя, но число токенов можно узнать через API. Ниже — заранее посчитанные примеры.</p>
+    <div class="table-wrap"><table id="claude-table"></table></div>
+  </section>
+  <p id="status"></p>
+</main>
+
+<script type="module">
+import { Tokenizer } from "https://cdn.jsdelivr.net/npm/@huggingface/tokenizers@0.2.0/+esm";
+import { Tiktoken } from "https://cdn.jsdelivr.net/npm/js-tiktoken@1.0.21/lite/+esm";
+import o200k from "https://cdn.jsdelivr.net/npm/js-tiktoken@1.0.21/ranks/o200k_base/+esm";
+
+const $ = (id) => document.getElementById(id);
+const input = $("input");
+const MAX = 2000;  // разбиение по префиксам квадратично — ограничиваем длину
+
+// те же правила, что metrics.aligned_pieces: режем там, где декодированный префикс совпадает с началом текста
+function pieces(ids, decode, text) {
+  const out = []; let lastPos = 0, lastI = 0;
+  for (let i = 1; i <= ids.length; i++) {
+    const p = decode(ids.slice(0, i));
+    const pos = text.startsWith(p) ? p.length : (text.startsWith(" " + p) ? p.length + 1 : -1);
+    if (pos > lastPos) { out.push([text.slice(lastPos, pos), i - lastI]); lastPos = pos; lastI = i; }
+  }
+  if (lastPos < text.length) out.push([text.slice(lastPos), ids.length - lastI]);
+  return out;
+}
+
+function show(el, ps) {
+  el.replaceChildren(...ps.map(([t, n], i) => {
+    const s = document.createElement("span");
+    s.className = "tok";
+    s.style.background = `var(--t${(i % 4) + 1})`;
+    s.textContent = t.replaceAll(" ", "·");
+    if (n > 1) { const sup = document.createElement("sup"); sup.textContent = n; s.append(sup); }
+    return s;
+  }));
+}
+
+let gpt, ours;
+function update() {
+  if (!gpt || !ours) return;
+  const text = input.value.slice(0, MAX);
+  const g = gpt.encode(text);
+  const o = ours.encode(text, { add_special_tokens: false }).ids;
+  show($("gpt"), pieces(g, (ids) => gpt.decode(ids), text));
+  show($("ours"), pieces(o, (ids) => ours.decode(ids), text));
+  $("gpt-count").textContent = `${g.length} ток.`;
+  $("ours-count").textContent = `${o.length} ток.`;
+  if (g.length) {
+    const pct = Math.round(100 * (1 - o.length / g.length));
+    $("delta").textContent = `${pct > 0 ? "−" : "+"}${Math.abs(pct)}%`;
+    $("delta-text").textContent = pct > 0
+      ? `токенов у ruEncod по сравнению с GPT-4o — на столько же дешевле был бы этот текст при той же цене за токен.`
+      : `токенов у ruEncod по сравнению с GPT-4o на этом тексте.`;
+  }
+  $("status").textContent = input.value.length > MAX ? `Показаны первые ${MAX} символов.` : "";
+}
+
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+async function boot() {
+  try {
+    const [tj, tc, ex] = await Promise.all(
+      ["tokenizer/tokenizer.json", "tokenizer/tokenizer_config.json", "examples.json"].map((u) => fetch(u).then((r) => r.json())));
+    ours = new Tokenizer(tj, tc);
+    gpt = new Tiktoken(o200k);
+    $("examples").replaceChildren(...ex.examples.map((e) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.textContent = e.text.length > 28 ? e.text.slice(0, 26) + "…" : e.text;
+      b.addEventListener("click", () => { input.value = e.text; update(); });
+      return b;
+    }));
+    $("claude-table").innerHTML =
+      `<tr><th>Текст</th><th class="n">GPT-4o</th><th class="n">${esc(ex.claude_label)}</th><th class="n">ruEncod</th></tr>` +
+      ex.examples.map((e) => `<tr><td>${esc(e.text)}</td><td class="n">${e.gpt_tokens}</td><td class="n">${e.claude_tokens}</td><td class="n">${e.ours_tokens}</td></tr>`).join("");
+    input.addEventListener("input", update);
+    update();
+  } catch (err) {
+    $("delta-text").textContent = "Не удалось загрузить словари. Обновите страницу.";
+    $("status").textContent = String(err);
+  }
+}
+boot();
+</script>

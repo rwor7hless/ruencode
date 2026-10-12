@@ -41,13 +41,7 @@ corpus:
       russian: true
       sources:
         - {kind: hf, path: IlyaGusev/gazeta, split: train, text: text, share: 0.5}
-        - kind: hf
-          path: HuggingFaceFW/fineweb-2
-          name: rus_Cyrl
-          split: train
-          text: text
-          share: 0.5
-          url_domains: [ria.ru, tass.ru, lenta.ru, rbc.ru, interfax.ru, kommersant.ru, iz.ru, rg.ru, gazeta.ru, fontanka.ru, meduza.io, vedomosti.ru]
+        - {kind: hf, path: zloelias/lenta-ru, split: train, text: text, share: 0.5}
     niche:
       share: 0.05
       russian: true
