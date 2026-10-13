@@ -239,3 +239,39 @@ def test_resume_on_cuda_matches_uninterrupted(tmp_path):
     assert math.isclose(stats["final_loss"], ref["final_loss"], rel_tol=1e-3)
     for (n, a), b in zip(full.named_parameters(), resumed.parameters()):
         assert torch.allclose(a, b, atol=1e-4), n
+
+
+def test_amp_dtype_picks_bf16_on_new_gpus_and_fp16_on_old(monkeypatch):
+    from ruencod.lm.train_lm import amp_dtype
+    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda *a: (7, 5))  # T4
+    assert amp_dtype("cuda", "auto") is torch.float16
+    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda *a: (8, 9))  # RTX 4060 Ti, L4
+    assert amp_dtype("cuda", "auto") is torch.bfloat16
+    assert amp_dtype("cuda", "fp16") is torch.float16
+    assert amp_dtype("cuda", "fp32") is None
+    assert amp_dtype("cpu", "auto") is None
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="нужна видеокарта")
+def test_fp16_with_loss_scaling_trains_and_resumes(tmp_path):
+    cfg = {**CPU_CFG, "device": "cuda", "precision": "fp16"}
+    full = _tiny()
+    ref = train_lm(full, _tokens(), cfg, seed=0)
+    assert ref["precision"] == "fp16" and math.isfinite(ref["final_loss"])
+    ckpt = tmp_path / "m.pt"
+    part = _tiny()
+    part.forward = _FailAfter(part.forward, after=5)
+    with pytest.raises(KeyboardInterrupt):
+        train_lm(part, _tokens(), cfg, seed=0, ckpt_path=ckpt)
+    resumed = _tiny(seed=123)
+    stats = train_lm(resumed, _tokens(), cfg, seed=0, ckpt_path=ckpt, resume=True)  # масштаб loss тоже из сохранения
+    assert math.isclose(stats["final_loss"], ref["final_loss"], rel_tol=1e-3)
+    for (n, a), b in zip(full.named_parameters(), resumed.parameters()):
+        assert torch.allclose(a, b, atol=1e-4), n
+
+
+def test_bpb_eval_respects_precision():
+    tok = SmallCharTok()
+    bits32, _ = nll_bits_and_bytes(UniformLM(2000), tok, ["абв"], context=7, dtype=None)
+    bits16, _ = nll_bits_and_bytes(UniformLM(2000), tok, ["абв"], context=7, dtype=torch.float16)
+    assert math.isclose(bits32, bits16, rel_tol=1e-5)  # на CPU autocast не включается ни для какого dtype

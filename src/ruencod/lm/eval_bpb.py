@@ -6,7 +6,7 @@ from ruencod.lm.train_lm import autocast
 
 
 @torch.no_grad()
-def nll_bits_and_bytes(model, tok, texts, context: int) -> tuple[float, int]:
+def nll_bits_and_bytes(model, tok, texts, context: int, dtype=torch.bfloat16) -> tuple[float, int]:
     model.eval()
     device = next(model.parameters(), torch.empty(0)).device
     nll, nbytes = 0.0, 0
@@ -17,7 +17,7 @@ def nll_bits_and_bytes(model, tok, texts, context: int) -> tuple[float, int]:
             chunk = ids[s:s + context + 1]
             x = torch.tensor(chunk[:-1], device=device).unsqueeze(0)
             y = torch.tensor(chunk[1:], device=device).unsqueeze(0)
-            with autocast(device.type):
+            with autocast(device.type, dtype):
                 _, loss = model(x, y, reduction="sum")
             nll += loss.item()
     return nll / math.log(2), nbytes

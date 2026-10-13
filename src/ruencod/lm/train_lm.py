@@ -27,20 +27,29 @@ def pick_device(pref: str = "auto") -> str:
     return pref
 
 
-def autocast(device: str):
-    """bf16 на видеокарте (Ampere/Ada и новее), на CPU — обычный fp32."""
-    if device == "cuda":
-        return torch.autocast(device_type="cuda", dtype=torch.bfloat16)
+def amp_dtype(device: str, precision: str = "auto"):
+    """bf16 на Ampere/Ada и новее; на старых картах (T4, P100, V100) — fp16 с масштабированием loss;
+    на CPU или при precision=fp32 — без смешанной точности (None)."""
+    if device != "cuda" or precision == "fp32":
+        return None
+    if precision == "auto":
+        return torch.bfloat16 if torch.cuda.get_device_capability()[0] >= 8 else torch.float16
+    return {"bf16": torch.bfloat16, "fp16": torch.float16}[precision]
+
+
+def autocast(device: str, dtype=torch.bfloat16):
+    if device == "cuda" and dtype is not None:
+        return torch.autocast(device_type="cuda", dtype=dtype)
     return contextlib.nullcontext()
 
 
-def save_checkpoint(path, model, opt, step: int, elapsed: float, loss: float, n_chunks: int) -> None:
+def save_checkpoint(path, model, opt, scaler, step: int, elapsed: float, loss: float, n_chunks: int) -> None:
     """Атомарно: при обрыве во время записи старое сохранение остаётся целым."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    torch.save({"model": model.state_dict(), "opt": opt.state_dict(), "step": step, "elapsed": elapsed,
-                "loss": loss, "n_chunks": n_chunks}, tmp)
+    torch.save({"model": model.state_dict(), "opt": opt.state_dict(), "scaler": scaler.state_dict(), "step": step,
+                "elapsed": elapsed, "loss": loss, "n_chunks": n_chunks}, tmp)
     os.replace(tmp, path)
 
 
@@ -64,6 +73,8 @@ def train_lm(model, tokens: np.ndarray, lm_cfg: dict, seed: int, log_every: int 
     opt = torch.optim.AdamW([{"params": decay, "weight_decay": lm_cfg["weight_decay"]},
                              {"params": no_decay, "weight_decay": 0.0}], lr=lm_cfg["lr"], betas=(0.9, 0.95),
                              fused=device == "cuda")
+    dtype = amp_dtype(device, lm_cfg.get("precision", "auto"))
+    scaler = torch.amp.GradScaler("cuda", enabled=dtype is torch.float16)  # для bf16 и fp32 — пустая обёртка
     warmup = max(1, int(steps * lm_cfg["warmup_frac"]))
     lr_max, lr_min = lm_cfg["lr"], lm_cfg["lr"] * 0.1
     start, before, loss_val = 0, 0.0, float("nan")
@@ -73,13 +84,15 @@ def train_lm(model, tokens: np.ndarray, lm_cfg: dict, seed: int, log_every: int 
             raise ValueError(f"{ckpt_path}: сохранение от другого корпуса ({st['n_chunks']} != {n_chunks} окон)")
         model.load_state_dict(st["model"])
         opt.load_state_dict(st["opt"])
+        if st.get("scaler"):
+            scaler.load_state_dict(st["scaler"])
         start, before, loss_val = st["step"], st["elapsed"], st["loss"]
         print(f"resume from step {start}/{steps}", flush=True)
     t0 = last_save = time.time()
     every = lm_cfg.get("ckpt_minutes", 10) * 60
 
     def save(done_steps: int) -> None:
-        save_checkpoint(ckpt_path, model, opt, done_steps, before + time.time() - t0, loss_val, n_chunks)
+        save_checkpoint(ckpt_path, model, opt, scaler, done_steps, before + time.time() - t0, loss_val, n_chunks)
 
     model.train()
     next_step = start
@@ -95,12 +108,14 @@ def train_lm(model, tokens: np.ndarray, lm_cfg: dict, seed: int, log_every: int 
                 lr = lr_min + 0.5 * (lr_max - lr_min) * (1 + math.cos(math.pi * prog))
             for g in opt.param_groups:
                 g["lr"] = lr
-            with autocast(device):
+            with autocast(device, dtype):
                 _, loss = model(x, y)
             opt.zero_grad(set_to_none=True)
-            loss.backward()
+            scaler.scale(loss).backward()
+            scaler.unscale_(opt)
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            opt.step()
+            scaler.step(opt)
+            scaler.update()
             next_step = step + 1
             loss_val = loss.item()
             if step % log_every == 0:
@@ -120,4 +135,5 @@ def train_lm(model, tokens: np.ndarray, lm_cfg: dict, seed: int, log_every: int 
     trained = n_chunks * ctx
     peak = torch.cuda.max_memory_allocated() / 1e9 if device == "cuda" else None
     return {"device": device, "steps": steps, "train_tokens": trained, "seconds": round(secs, 1),
-            "tokens_per_sec": trained / secs if secs else 0.0, "final_loss": loss_val, "peak_gpu_gb": peak}
+            "tokens_per_sec": trained / secs if secs else 0.0, "final_loss": loss_val, "peak_gpu_gb": peak,
+            "precision": {torch.bfloat16: "bf16", torch.float16: "fp16"}.get(dtype, "fp32")}

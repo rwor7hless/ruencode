@@ -12,7 +12,7 @@ from ruencod.corpus import domain_shares, iter_domain, iter_mix, russian_domains
 from ruencod.eval.adapters import resolve
 from ruencod.lm.eval_bpb import nll_bits_and_bytes
 from ruencod.lm.model import LMConfig, TinyLM
-from ruencod.lm.train_lm import encode_corpus, train_lm
+from ruencod.lm.train_lm import amp_dtype, encode_corpus, train_lm
 
 
 def run_candidate(cfg: dict, name: str, train_bytes: int, ckpt_path=None, resume: bool = False) -> list[dict]:
@@ -24,10 +24,11 @@ def run_candidate(cfg: dict, name: str, train_bytes: int, ckpt_path=None, resume
                             n_heads=lm["n_heads"], context=lm["context"], loss_chunk=lm.get("loss_chunk", 0),
                             checkpoint_blocks=lm.get("checkpoint_blocks", False)))
     stats = train_lm(model, tokens, lm, cfg["seed"], ckpt_path=ckpt_path, resume=resume)
+    dtype = amp_dtype(stats["device"], lm.get("precision", "auto"))
     rows, ru_bits, ru_bytes = [], 0.0, 0
     for d in cfg["corpus"]["domains"]:
         texts = list(iter_domain(data, "heldout", d, lm["eval_bytes_per_domain"]))
-        bits, nbytes = nll_bits_and_bytes(model, tok, texts, lm["context"])
+        bits, nbytes = nll_bits_and_bytes(model, tok, texts, lm["context"], dtype)
         rows.append({"candidate": name, "domain": d, "bpb": bits / nbytes, **stats})
         if d in russian_domains(cfg):
             ru_bits, ru_bytes = ru_bits + bits, ru_bytes + nbytes
